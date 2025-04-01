@@ -1,5 +1,5 @@
 const std = @import("std");
-const lexer = @import("lexer.zig");
+const Module = @import("module.zig");
 
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
@@ -25,11 +25,11 @@ pub fn main() !void {
         }
     }
 
-    const l = lexer.Lexer.init(allocator);
-    const tokens = try l.lex("pub test = {};", .{});
-    defer allocator.free(tokens);
+    const cwd = std.fs.cwd();
+    const module = try Module.load(allocator, try (try cwd.openDir("sample", .{})).openDir("my_module1", .{}));
+    defer module.deinit(allocator);
 
-    for (tokens) |token| {
+    for (module.tokens) |token| {
         std.debug.print("{s} - {s}\n", .{ @tagName(token.token_type), token.source });
     }
 }

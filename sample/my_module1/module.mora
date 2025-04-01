@@ -1,0 +1,6 @@
+name = "My 1st module";
+required = true;
+
+service my_service {
+  image = "hello@sha256:447303ce841432eed82c13be6fd12d68127671500358bc41b1cd734e3f43b50e";
+}

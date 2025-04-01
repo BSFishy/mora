@@ -20,10 +20,9 @@ pub const Lexer = lexer.Lexer(.{
     .semicolon = .{ .pattern = ";" },
 
     // keywords
-    .func = .{ .pattern = "fn" },
-    .@"pub" = .{ .pattern = "pub" },
-    .@"const" = .{ .pattern = "const" },
-    .@"return" = .{ .pattern = "return" },
+    .service = .{ .pattern = "service" },
+    .true = .{ .pattern = "true" },
+    .false = .{ .pattern = "false" },
 
     // literal values
     .string = .{ .pattern = "\"([^\"]|\\\\\")*\"" },

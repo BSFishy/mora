@@ -25,12 +25,32 @@ pub fn main() !void {
         }
     }
 
-    const cwd = std.fs.cwd();
-    const module = try Module.load(allocator, try (try cwd.openDir("sample", .{})).openDir("my_module1", .{}));
-    defer module.deinit(allocator);
+    const dir = try std.fs.cwd().openDir("sample", .{ .iterate = true });
+    var iter = dir.iterate();
+    var modules = std.ArrayListUnmanaged(Module).empty;
+    defer {
+        for (modules.items) |module| {
+            module.deinit(allocator);
+        }
 
-    for (module.tokens) |token| {
-        std.debug.print("{s} - {s}\n", .{ @tagName(token.token_type), token.source });
+        modules.deinit(allocator);
+    }
+
+    while (try iter.next()) |entry| {
+        if (entry.kind != .directory) {
+            continue;
+        }
+
+        const module = try Module.load(allocator, try dir.openDir(entry.name, .{}));
+        try modules.append(allocator, module);
+    }
+
+    for (modules.items) |module| {
+        std.debug.print("\nnew module\n", .{});
+
+        for (module.tokens) |token| {
+            std.debug.print("{s} - {s}\n", .{ @tagName(token.token_type), token.source });
+        }
     }
 }
 

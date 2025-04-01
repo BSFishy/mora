@@ -17,6 +17,8 @@ pub const Lexer = lexer.Lexer(.{
     .period = .{ .pattern = "." },
     .left_brace = .{ .pattern = "{" },
     .right_brace = .{ .pattern = "}" },
+    .left_bracket = .{ .pattern = "\\[" },
+    .right_bracket = .{ .pattern = "\\]" },
     .semicolon = .{ .pattern = ";" },
 
     // keywords

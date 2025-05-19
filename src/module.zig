@@ -19,6 +19,7 @@ pub fn load(allocator: std.mem.Allocator, root_dir: std.fs.Dir) !Self {
 
         return err;
     };
+    errdefer allocator.free(tokens);
 
     return .{
         .contents = contents,

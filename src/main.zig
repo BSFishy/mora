@@ -1,5 +1,6 @@
 const std = @import("std");
-const Block = @import("block.zig");
+const lexer = @import("lexer.zig");
+const parser = @import("parser.zig");
 
 pub fn main() !void {
     var debug_allocator = std.heap.DebugAllocator(.{}){};
@@ -11,31 +12,7 @@ pub fn main() !void {
         }
     }
 
-    const dir = try std.fs.cwd().openDir("sample", .{ .iterate = true });
-    var iter = dir.iterate();
-    var blocks = std.ArrayListUnmanaged(Block).empty;
-    defer {
-        for (blocks.items) |block| {
-            block.deinit(allocator);
-        }
+    _ = allocator;
 
-        blocks.deinit(allocator);
-    }
-
-    while (try iter.next()) |entry| {
-        if (entry.kind != .directory) {
-            continue;
-        }
-
-        const module = try Block.load(allocator, try dir.openDir(entry.name, .{}));
-        try blocks.append(allocator, module);
-    }
-
-    for (blocks.items) |_| {
-        std.debug.print("\nnew module\n", .{});
-
-        // for (module.tokens) |token| {
-        //     std.debug.print("{s} - {s}\n", .{ @tagName(token.token_type), token.source });
-        // }
-    }
+    std.debug.print("hello world\n", .{});
 }

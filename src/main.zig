@@ -1,6 +1,7 @@
 const std = @import("std");
 const lexer = @import("lexer.zig");
 const parser = @import("parser.zig");
+const graphviz = @import("graphviz.zig");
 
 pub fn main() !void {
     var debug_allocator = std.heap.DebugAllocator(.{}){};
@@ -31,5 +32,6 @@ pub fn main() !void {
     defer arena.deinit();
     const items = try parser.parse(arena.allocator(), tokens);
 
+    graphviz.printGraphviz(items);
     std.debug.print("{any}\n", .{items});
 }

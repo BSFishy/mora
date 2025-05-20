@@ -68,15 +68,15 @@ const Parser = struct {
         };
     }
 
-    fn deinit(self: *Self) void {
-        self.stack.deinit(self.allocator);
-    }
-
     pub fn parse(allocator: std.mem.Allocator, tokens: []lexer.Token) ![]Item {
         var self = Self.init(allocator, tokens);
-        defer self.deinit();
 
-        return try self.parseItems();
+        const items = try self.parseItems();
+        if (self.i != self.tokens.len) {
+            return error.invalidInput;
+        }
+
+        return items;
     }
 
     fn peek(self: *const Self) ?lexer.Token {
@@ -136,10 +136,6 @@ const Parser = struct {
         errdefer self.rollback();
 
         var items = std.ArrayListUnmanaged(Item).empty;
-        errdefer {
-            items.deinit(self.allocator);
-        }
-
         while (try optional(Item, self.parseItem())) |item| {
             try items.append(self.allocator, item);
         }
@@ -169,6 +165,7 @@ const Parser = struct {
         const identifier = try self.consume(.ident);
         _ = try self.consume(.equal);
         const expression = try self.parseExpression();
+        _ = try self.consume(.semicolon);
 
         return .{
             .identifier = try self.allocator.dupe(u8, identifier.source),
@@ -181,10 +178,6 @@ const Parser = struct {
         errdefer self.rollback();
 
         var expressions = std.ArrayListUnmanaged(Expression).empty;
-        errdefer {
-            expressions.deinit(self.allocator);
-        }
-
         while (try optional(Expression, self.parseExpression())) |expression| {
             try expressions.append(self.allocator, expression);
         }
@@ -226,8 +219,6 @@ const Parser = struct {
         _ = try self.consume(.left_paren);
 
         const expressions = try self.parseExpressions();
-        errdefer self.allocator.free(expressions);
-
         _ = try self.consume(.right_paren);
 
         return expressions;
@@ -238,13 +229,8 @@ const Parser = struct {
         errdefer self.rollback();
 
         const list = try self.parseExpressions();
-        errdefer self.allocator.free(list);
-
         _ = try self.consume(.left_brace);
-
         const items = try self.parseItems();
-        errdefer self.allocator.free(items);
-
         _ = try self.consume(.right_brace);
 
         return .{

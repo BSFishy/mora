@@ -30,7 +30,7 @@ pub const Atom = union(enum) {
     number: []const u8,
 };
 
-pub fn parse(allocator: std.mem.Allocator, tokens: []lexer.Token) void {
+pub fn parse(allocator: std.mem.Allocator, tokens: []lexer.Token) ![]Item {
     return Parser.parse(allocator, tokens);
 }
 
@@ -68,12 +68,12 @@ const Parser = struct {
         };
     }
 
-    fn deinit(self: *const Self) void {
+    fn deinit(self: *Self) void {
         self.stack.deinit(self.allocator);
     }
 
     pub fn parse(allocator: std.mem.Allocator, tokens: []lexer.Token) ![]Item {
-        const self = Self.init(allocator, tokens);
+        var self = Self.init(allocator, tokens);
         defer self.deinit();
 
         return try self.parseItems();
@@ -204,14 +204,19 @@ const Parser = struct {
             return .{ .list = list };
         }
 
-        return error.unimplemented;
+        return error.invalidInput;
     }
 
     fn parseAtom(self: *Self) !Atom {
         try self.enter();
         errdefer self.rollback();
 
-        return error.unimplemented;
+        const token = try self.oneOf(&.{ .string, .ident, .number });
+        return switch (token.token_type) {
+            .string => .{ .string = token.source[1 .. token.source.len - 1] },
+            .ident => .{ .identifier = token.source },
+            .number => .{ .number = token.source },
+        };
     }
 
     fn parseListExpression(self: *Self) ![]Expression {

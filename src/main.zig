@@ -12,7 +12,24 @@ pub fn main() !void {
         }
     }
 
-    _ = allocator;
+    var cwd = std.fs.cwd();
+    var sample = try cwd.openDir("sample", .{});
+    defer sample.close();
 
-    std.debug.print("hello world\n", .{});
+    var my_module1 = try sample.openDir("my_module1", .{});
+    defer my_module1.close();
+
+    const content = try my_module1.readFileAlloc(allocator, "module.mora", 2 * 1024 * 1024 * 1024);
+    defer allocator.free(content);
+
+    var l = lexer.Lexer.init(allocator);
+
+    const tokens = try l.lex(content, .{});
+    defer allocator.free(tokens);
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const items = try parser.parse(arena.allocator(), tokens);
+
+    std.debug.print("{any}\n", .{items});
 }

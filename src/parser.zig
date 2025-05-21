@@ -5,6 +5,20 @@ const lexer = @import("lexer.zig");
 pub const Item = union(enum) {
     statement: Statement,
     block: Block,
+
+    pub fn asStatement(self: Item) ?Statement {
+        return switch (self) {
+            .statement => |statement| statement,
+            else => null,
+        };
+    }
+
+    pub fn asBlock(self: Item) ?Block {
+        return switch (self) {
+            .block => |block| block,
+            else => null,
+        };
+    }
 };
 
 pub const Statement = struct {
@@ -20,6 +34,20 @@ pub const Block = struct {
 pub const Expression = union(enum) {
     list: ListExpression,
     atom: Atom,
+
+    pub fn asList(self: Expression) ?ListExpression {
+        return switch (self) {
+            .list => |list| list,
+            else => null,
+        };
+    }
+
+    pub fn asAtom(self: Expression) ?Atom {
+        return switch (self) {
+            .atom => |atom| atom,
+            else => null,
+        };
+    }
 };
 
 pub const ListExpression = []Expression;
@@ -27,7 +55,31 @@ pub const ListExpression = []Expression;
 pub const Atom = union(enum) {
     string: []const u8,
     identifier: []const u8,
+    // representing numbers as the raw string that comes from the source code.
+    // no need to actually parse it out here, can just send it directly to the
+    // manager
     number: []const u8,
+
+    pub fn asString(self: Atom) ?[]const u8 {
+        return switch (self) {
+            .string => |string| string,
+            else => null,
+        };
+    }
+
+    pub fn asIdentifier(self: Atom) ?[]const u8 {
+        return switch (self) {
+            .identifier => |identifier| identifier,
+            else => null,
+        };
+    }
+
+    pub fn asNumber(self: Atom) ?[]const u8 {
+        return switch (self) {
+            .number => |number| number,
+            else => null,
+        };
+    }
 };
 
 pub fn parse(allocator: std.mem.Allocator, tokens: []lexer.Token) ![]Item {

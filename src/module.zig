@@ -13,14 +13,8 @@ const Service = struct {
         }
 
         const expression = block.identifier[1];
-        const atom = switch (expression) {
-            .atom => |a| a,
-            else => return error.invalidServiceName,
-        };
-        const name = switch (atom) {
-            .identifier => |ident| ident,
-            else => return error.invalidServiceName,
-        };
+        const atom = expression.asAtom() orelse return error.invalidServiceName;
+        const name = atom.asIdentifier() orelse return error.invalidServiceName;
 
         var image: ?parser.Expression = null;
 
@@ -52,14 +46,8 @@ fn matchIdentifier(haystack: []const parser.Expression, needle: []const u8) bool
     }
 
     const expression = haystack[0];
-    const atom = switch (expression) {
-        .atom => |a| a,
-        else => return false,
-    };
-    const identifier = switch (atom) {
-        .identifier => |ident| ident,
-        else => return false,
-    };
+    const atom = expression.asAtom() orelse return false;
+    const identifier = atom.asIdentifier() orelse return false;
 
     return std.mem.eql(u8, needle, identifier);
 }

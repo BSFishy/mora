@@ -2,6 +2,7 @@ const std = @import("std");
 const lexer = @import("lexer.zig");
 const parser = @import("parser.zig");
 const Module = @import("module.zig");
+const Payload = @import("payload.zig");
 
 pub fn main() !void {
     var debug_allocator = std.heap.DebugAllocator(.{}){};
@@ -14,28 +15,65 @@ pub fn main() !void {
     }
 
     var cwd = std.fs.cwd();
-    var sample = try cwd.openDir("sample", .{});
+    var sample = try cwd.openDir("sample", .{ .iterate = true });
     defer sample.close();
 
-    var my_module1 = try sample.openDir("my_module1", .{});
-    defer my_module1.close();
+    var modules = std.ArrayListUnmanaged(Module).empty;
+    errdefer modules.deinit(allocator);
 
-    const content = try my_module1.readFileAlloc(allocator, "module.mora", 2 * 1024 * 1024 * 1024);
-    defer allocator.free(content);
+    // using an arena allocator for modules too because they contain ast nodes
+    // and i dont wanna pollute that code with deinit stuff
+    var moduleAlloc = std.heap.ArenaAllocator.init(allocator);
+    defer moduleAlloc.deinit();
 
-    var l = lexer.Lexer.init(allocator);
+    var iter = sample.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind != .directory) {
+            continue;
+        }
 
-    const tokens = try l.lex(content, .{});
-    defer allocator.free(tokens);
-
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const items = try parser.parse(arena.allocator(), tokens);
-
-    const module = try Module.init(allocator, items);
-    defer module.deinit(allocator);
-
-    for (module.services) |service| {
-        std.debug.print("{s} - {any}\n", .{ service.name, service.image });
+        const dir = try sample.openDir(entry.name, .{ .iterate = true });
+        try modules.append(allocator, try parseModule(moduleAlloc.allocator(), dir, entry.name));
     }
+
+    const stdout = std.io.getStdOut();
+    const writer = stdout.writer();
+
+    const moduleSlice = try modules.toOwnedSlice(allocator);
+    defer allocator.free(moduleSlice);
+
+    try std.json.stringify(Payload{ .modules = moduleSlice }, .{}, writer);
+}
+
+fn parseModule(allocator: std.mem.Allocator, dir: std.fs.Dir, name: []const u8) !Module {
+    var module = try Module.init(allocator, name);
+    errdefer module.deinit(allocator);
+
+    var iter = dir.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind != .file) {
+            continue;
+        }
+
+        if (!std.mem.endsWith(u8, entry.name, ".mora")) {
+            continue;
+        }
+
+        const content = try dir.readFileAlloc(allocator, entry.name, 2 * 1024 * 1024 * 1024);
+        defer allocator.free(content);
+
+        var l = lexer.Lexer.init(allocator);
+
+        const tokens = try l.lex(content, .{});
+        defer allocator.free(tokens);
+
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+
+        const items = try parser.parse(arena.allocator(), tokens);
+
+        try module.insert(allocator, items);
+    }
+
+    return module;
 }

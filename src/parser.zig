@@ -258,9 +258,9 @@ const Parser = struct {
 
         const token = try self.oneOf(&.{ .string, .ident, .number });
         return switch (token.token_type) {
-            .string => .{ .string = token.source[1 .. token.source.len - 1] },
-            .ident => .{ .identifier = token.source },
-            .number => .{ .number = token.source },
+            .string => .{ .string = try self.allocator.dupe(u8, token.source[1 .. token.source.len - 1]) },
+            .ident => .{ .identifier = try self.allocator.dupe(u8, token.source) },
+            .number => .{ .number = try self.allocator.dupe(u8, token.source) },
         };
     }
 

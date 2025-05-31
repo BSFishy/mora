@@ -10,7 +10,7 @@ pub fn main() !void {
     defer {
         const check = debug_allocator.deinit();
         if (check == .leak) {
-            std.process.exit(1);
+            @panic("memory leak");
         }
     }
 
@@ -36,13 +36,48 @@ pub fn main() !void {
         try modules.append(allocator, try parseModule(moduleAlloc.allocator(), dir, entry.name));
     }
 
-    const stdout = std.io.getStdOut();
-    const writer = stdout.writer();
-
     const moduleSlice = try modules.toOwnedSlice(allocator);
     defer allocator.free(moduleSlice);
 
+    var client = std.http.Client{ .allocator = allocator };
+    defer client.deinit();
+
+    const header_buffer = try allocator.alloc(u8, 2 * 1024);
+    defer allocator.free(header_buffer);
+
+    var request = try client.open(.POST, try std.Uri.parse("http://127.0.0.1:8080/api/v1/deployment"), .{ .server_header_buffer = header_buffer });
+    defer request.deinit();
+
+    request.transfer_encoding = .chunked;
+
+    try request.send();
+
+    const writer = request.writer();
     try std.json.stringify(Payload{ .modules = moduleSlice }, .{}, writer);
+
+    try request.finish();
+    try request.wait();
+
+    const response = request.response;
+    if (response.status != .ok) {
+        std.debug.print("request errored: {s}\n", .{@tagName(response.status)});
+
+        const reader = request.reader();
+
+        const stdout = std.io.getStdOut();
+        defer stdout.close();
+
+        const stdoutWriter = stdout.writer();
+
+        var fifo = std.fifo.LinearFifo(u8, .Dynamic).init(allocator);
+        defer fifo.deinit();
+
+        try fifo.pump(reader, stdoutWriter);
+
+        return error.invalidStatus;
+    }
+
+    std.debug.print("Success\n", .{});
 }
 
 fn parseModule(allocator: std.mem.Allocator, dir: std.fs.Dir, name: []const u8) !Module {

@@ -3,16 +3,16 @@ const lexer = @import("lexer.zig");
 const parser = @import("parser.zig");
 const Module = @import("module.zig");
 const Payload = @import("payload.zig");
+const command = @import("command.zig");
 
-pub fn main() !void {
-    var debug_allocator = std.heap.DebugAllocator(.{}){};
-    const allocator = debug_allocator.allocator();
-    defer {
-        const check = debug_allocator.deinit();
-        if (check == .leak) {
-            @panic("memory leak");
-        }
-    }
+fn default(allocator: std.mem.Allocator, args: *command.Args) !void {
+    defer args.deinit(allocator);
+
+    std.debug.print("Please use a subcommand\n", .{});
+}
+
+fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
+    defer args.deinit(allocator);
 
     var cwd = std.fs.cwd();
     var sample = try cwd.openDir("sample", .{ .iterate = true });
@@ -78,6 +78,34 @@ pub fn main() !void {
     }
 
     std.debug.print("Success\n", .{});
+}
+
+const deploy_cmd = command.Command(.{
+    .name = "deploy",
+    .rest = true,
+    .handler = deploy,
+});
+
+const Command = command.Command(.{
+    .name = "mora-preflight",
+    .flags = .{
+        .help = .{ .short = 'h', .long = "help", .help = "display this help text" },
+    },
+    .subcommands = &.{deploy_cmd},
+    .handler = default,
+});
+
+pub fn main() !void {
+    var debug_allocator = std.heap.DebugAllocator(.{}){};
+    const allocator = debug_allocator.allocator();
+    defer {
+        const check = debug_allocator.deinit();
+        if (check == .leak) {
+            @panic("memory leak");
+        }
+    }
+
+    try Command.parse(allocator);
 }
 
 fn parseModule(allocator: std.mem.Allocator, dir: std.fs.Dir, name: []const u8) !Module {

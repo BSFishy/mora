@@ -14,12 +14,19 @@ const deploy_cmd = command.Command(.{
     .handler = deploy,
 });
 
+const auth = @import("auth.zig").auth;
+const auth_cmd = command.Command(.{
+    .name = "auth",
+    .rest = true,
+    .handler = auth,
+});
+
 const Command = command.Command(.{
     .name = "mora-preflight",
     .flags = .{
         .help = .{ .short = 'h', .long = "help", .help = "display this help text" },
     },
-    .subcommands = &.{deploy_cmd},
+    .subcommands = &.{ auth_cmd, deploy_cmd },
     .handler = default,
 });
 

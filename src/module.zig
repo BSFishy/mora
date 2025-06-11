@@ -6,6 +6,7 @@ const Self = @This();
 const Service = struct {
     name: []const u8,
     image: parser.Expression,
+    requires: []parser.Expression,
 
     pub fn fromBlock(allocator: std.mem.Allocator, block: parser.Block) !Service {
         if (block.identifier.len != 2) {
@@ -17,12 +18,16 @@ const Service = struct {
         const name = atom.asIdentifier() orelse return error.invalidServiceName;
 
         var image: ?parser.Expression = null;
+        var requires = std.ArrayListUnmanaged(parser.Expression).empty;
+        defer requires.deinit(allocator);
 
         for (block.items) |item| {
             switch (item) {
                 .statement => |statement| {
                     if (std.mem.eql(u8, statement.identifier, "image")) {
                         image = try dupeExpression(allocator, statement.expression);
+                    } else if (std.mem.eql(u8, statement.identifier, "requires")) {
+                        try requires.append(allocator, try dupeExpression(allocator, statement.expression));
                     } else {
                         return error.invalidStatement;
                     }
@@ -34,6 +39,7 @@ const Service = struct {
         return .{
             .name = try allocator.dupe(u8, name),
             .image = image orelse return error.noImage,
+            .requires = try requires.toOwnedSlice(allocator),
         };
     }
 };

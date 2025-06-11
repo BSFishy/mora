@@ -20,8 +20,8 @@ pub fn auth(allocator: std.mem.Allocator, args: *command.Args) !void {
         .token = args.rest[1],
     };
 
-    var api = Api.init(allocator, config.domain, config.token);
-    defer api.deinit();
+    var api = try Api.init(allocator, config.domain, config.token);
+    defer api.deinit(allocator);
 
     api.ping(allocator) catch |err| {
         std.debug.print("Failed to connect to server successfully. Please make sure you put in your details correctly.\n", .{});

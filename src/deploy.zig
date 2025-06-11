@@ -4,9 +4,18 @@ const lexer = @import("lexer.zig");
 const parser = @import("parser.zig");
 const Module = @import("module.zig");
 const Payload = @import("payload.zig");
+const Api = @import("api.zig");
 
 pub fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
     defer args.deinit(allocator);
+
+    const rest = args.rest;
+    if (rest.len != 1) {
+        std.debug.print("Usage: mora-preflight deploy <environment slug>\n", .{});
+        return error.invalidInput;
+    }
+
+    const environment = rest[0];
 
     var cwd = std.fs.cwd();
     var sample = try cwd.openDir("sample", .{ .iterate = true });
@@ -33,43 +42,10 @@ pub fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
     const moduleSlice = try modules.toOwnedSlice(allocator);
     defer allocator.free(moduleSlice);
 
-    var client = std.http.Client{ .allocator = allocator };
-    defer client.deinit();
+    var api = try Api.fromConfig(allocator);
+    defer api.deinit(allocator);
 
-    const header_buffer = try allocator.alloc(u8, 2 * 1024);
-    defer allocator.free(header_buffer);
-
-    var request = try client.open(.POST, try std.Uri.parse("http://127.0.0.1:8080/api/v1/deployment"), .{ .server_header_buffer = header_buffer });
-    defer request.deinit();
-
-    request.transfer_encoding = .chunked;
-
-    try request.send();
-
-    const writer = request.writer();
-    try std.json.stringify(Payload{ .modules = moduleSlice }, .{}, writer);
-
-    try request.finish();
-    try request.wait();
-
-    const response = request.response;
-    if (response.status != .ok) {
-        std.debug.print("request errored: {s}\n", .{@tagName(response.status)});
-
-        const reader = request.reader();
-
-        const stdout = std.io.getStdOut();
-        defer stdout.close();
-
-        const stdoutWriter = stdout.writer();
-
-        var fifo = std.fifo.LinearFifo(u8, .Dynamic).init(allocator);
-        defer fifo.deinit();
-
-        try fifo.pump(reader, stdoutWriter);
-
-        return error.invalidStatus;
-    }
+    try api.deploy(allocator, environment, .{ .modules = moduleSlice });
 
     std.debug.print("Success\n", .{});
 }

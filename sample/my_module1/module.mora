@@ -1,3 +1,8 @@
+config my_image {
+  name = "Image";
+  description = "Put in hello-world@sha256:dd01f97f252193ae3210da231b1dca0cffab4aadb3566692d6730bf93f123a48";
+}
+
 service my_service {
-  image = "hello-world@sha256:dd01f97f252193ae3210da231b1dca0cffab4aadb3566692d6730bf93f123a48";
+  image = (config my_image);
 }

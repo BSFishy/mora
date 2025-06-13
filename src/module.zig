@@ -3,6 +3,44 @@ const parser = @import("parser.zig");
 
 const Self = @This();
 
+const Config = struct {
+    identifier: []const u8,
+    name: parser.Expression,
+    description: ?parser.Expression,
+
+    pub fn fromBlock(allocator: std.mem.Allocator, block: parser.Block) !Config {
+        if (block.identifier.len != 2) {
+            return error.invalidConfigName;
+        }
+
+        const expression = block.identifier[1];
+        const atom = expression.asAtom() orelse return error.invalidConfigName;
+        const identifier = atom.asIdentifier() orelse return error.invalidConfigName;
+
+        var name: ?parser.Expression = null;
+        var description: ?parser.Expression = null;
+
+        for (block.items) |item| {
+            switch (item) {
+                .statement => |statement| {
+                    if (std.mem.eql(u8, statement.identifier, "name")) {
+                        name = try dupeExpression(allocator, statement.expression);
+                    } else if (std.mem.eql(u8, statement.identifier, "description")) {
+                        description = try dupeExpression(allocator, statement.expression);
+                    }
+                },
+                .block => return error.invalidBlock,
+            }
+        }
+
+        return .{
+            .identifier = try allocator.dupe(u8, identifier),
+            .name = name orelse return error.invalidConfig,
+            .description = description,
+        };
+    }
+};
+
 const Service = struct {
     name: []const u8,
     image: parser.Expression,
@@ -45,6 +83,7 @@ const Service = struct {
 };
 
 name: []const u8,
+configs: []Config,
 services: []Service,
 
 fn dupeExpression(allocator: std.mem.Allocator, expression: parser.Expression) !parser.Expression {
@@ -83,6 +122,7 @@ fn matchIdentifier(haystack: []const parser.Expression, needle: []const u8) bool
 pub fn init(allocator: std.mem.Allocator, name: []const u8) !Self {
     return .{
         .name = name,
+        .configs = try allocator.alloc(Config, 0),
         .services = try allocator.alloc(Service, 0),
     };
 }
@@ -92,6 +132,7 @@ pub fn deinit(self: *const Self, allocator: std.mem.Allocator) void {
 }
 
 pub fn insert(self: *Self, allocator: std.mem.Allocator, items: []const parser.Item) !void {
+    var configs = std.ArrayListUnmanaged(Config).fromOwnedSlice(self.configs);
     var services = std.ArrayListUnmanaged(Service).fromOwnedSlice(self.services);
 
     for (items) |item| {
@@ -100,6 +141,8 @@ pub fn insert(self: *Self, allocator: std.mem.Allocator, items: []const parser.I
             .block => |block| {
                 if (matchIdentifier(block.identifier, "service")) {
                     try services.append(allocator, try Service.fromBlock(allocator, block));
+                } else if (matchIdentifier(block.identifier, "config")) {
+                    try configs.append(allocator, try Config.fromBlock(allocator, block));
                 } else {
                     return error.invalidBlock;
                 }
@@ -107,5 +150,6 @@ pub fn insert(self: *Self, allocator: std.mem.Allocator, items: []const parser.I
         }
     }
 
+    self.configs = try configs.toOwnedSlice(allocator);
     self.services = try services.toOwnedSlice(allocator);
 }

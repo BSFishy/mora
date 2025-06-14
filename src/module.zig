@@ -1,5 +1,6 @@
 const std = @import("std");
 const parser = @import("parser.zig");
+const Cache = @import("cache.zig");
 
 const Self = @This();
 
@@ -7,6 +8,7 @@ const ModuleContext = struct {
     dir: std.fs.Dir,
     environment: []const u8,
     name: []const u8,
+    cache: *Cache.ModuleCache,
 };
 
 const Config = struct {
@@ -72,6 +74,7 @@ const Service = struct {
                         const expr = try dupeExpression(allocator, statement.expression);
                         image = if (try expr.evaluate(&parser.EvaluationContext{
                             .allocator = allocator,
+                            .cache = ctx.cache,
                             .environment = ctx.environment,
                             .module = ctx.name,
                             .service = name,
@@ -150,7 +153,7 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     allocator.free(self.services);
 }
 
-pub fn insert(self: *Self, allocator: std.mem.Allocator, environment: []const u8, items: []const parser.Item) !void {
+pub fn insert(self: *Self, allocator: std.mem.Allocator, cache: *Cache.ModuleCache, environment: []const u8, items: []const parser.Item) !void {
     var configs = std.ArrayListUnmanaged(Config).fromOwnedSlice(self.configs);
     var services = std.ArrayListUnmanaged(Service).fromOwnedSlice(self.services);
 
@@ -159,7 +162,7 @@ pub fn insert(self: *Self, allocator: std.mem.Allocator, environment: []const u8
             .statement => return error.invalidStatement,
             .block => |block| {
                 if (matchIdentifier(block.identifier, "service")) {
-                    try services.append(allocator, try Service.fromBlock(allocator, .{ .dir = self.dir, .environment = environment, .name = self.name }, block));
+                    try services.append(allocator, try Service.fromBlock(allocator, .{ .cache = cache, .dir = self.dir, .environment = environment, .name = self.name }, block));
                 } else if (matchIdentifier(block.identifier, "config")) {
                     try configs.append(allocator, try Config.fromBlock(allocator, block));
                 } else {

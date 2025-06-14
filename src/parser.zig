@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Cache = @import("cache.zig");
 const functions = @import("functions.zig");
 const lexer = @import("lexer.zig");
 
@@ -66,6 +67,7 @@ pub const ReturnValue = union(enum) {
 
 pub const EvaluationContext = struct {
     allocator: std.mem.Allocator,
+    cache: *Cache.ModuleCache,
     environment: []const u8,
     module: []const u8,
     service: []const u8,

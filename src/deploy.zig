@@ -2,6 +2,7 @@ const std = @import("std");
 const command = @import("command.zig");
 const lexer = @import("lexer.zig");
 const parser = @import("parser.zig");
+const Cache = @import("cache.zig");
 const Module = @import("module.zig");
 const Payload = @import("payload.zig");
 const Api = @import("api.zig");
@@ -23,6 +24,9 @@ pub fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
     var sample = try cwd.openDir(directory, .{ .iterate = true });
     defer sample.close();
 
+    var cache = try Cache.init();
+    defer cache.deinit();
+
     var modules = std.ArrayListUnmanaged(Module).empty;
     errdefer modules.deinit(allocator);
 
@@ -37,8 +41,13 @@ pub fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
             continue;
         }
 
+        var moduleCache = try cache.module(moduleAlloc.allocator(), entry.name);
+        defer moduleCache.deinit();
+
         const dir = try sample.openDir(entry.name, .{ .iterate = true });
-        try modules.append(allocator, try parseModule(moduleAlloc.allocator(), environment, dir, entry.name));
+        try modules.append(allocator, try parseModule(moduleAlloc.allocator(), &moduleCache, environment, dir, entry.name));
+
+        try moduleCache.write();
     }
 
     const moduleSlice = try modules.toOwnedSlice(allocator);
@@ -52,7 +61,7 @@ pub fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
     std.debug.print("Success\n", .{});
 }
 
-fn parseModule(allocator: std.mem.Allocator, environment: []const u8, dir: std.fs.Dir, name: []const u8) !Module {
+fn parseModule(allocator: std.mem.Allocator, cache: *Cache.ModuleCache, environment: []const u8, dir: std.fs.Dir, name: []const u8) !Module {
     var module = try Module.init(allocator, dir, name);
     errdefer module.deinit(allocator);
 
@@ -79,7 +88,7 @@ fn parseModule(allocator: std.mem.Allocator, environment: []const u8, dir: std.f
 
         const items = try parser.parse(arena.allocator(), tokens);
 
-        try module.insert(allocator, environment, items);
+        try module.insert(allocator, cache, environment, items);
     }
 
     return module;

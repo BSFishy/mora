@@ -234,7 +234,6 @@ pub const Args = struct {
 
         fn deinit(self: *Builder, allocator: std.mem.Allocator) void {
             self.flags.deinit(allocator);
-            self.options.deinit(allocator);
             self.rest.deinit(allocator);
         }
 

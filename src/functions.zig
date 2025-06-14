@@ -1,4 +1,5 @@
 const std = @import("std");
+const hashDir = @import("hash.zig").hashDir;
 const Api = @import("api.zig");
 const parser = @import("parser.zig");
 const docker = @import("docker.zig");
@@ -17,9 +18,18 @@ pub fn image(ctx: *const parser.EvaluationContext, args: []const parser.Expressi
     const path = try dir.realpathAlloc(ctx.allocator, ".");
     defer ctx.allocator.free(path);
 
+    const basename = std.fs.path.basename(path);
+
+    const computedHash = try hashDir(ctx.allocator, dir);
+    const previousHash = ctx.cache.getImageHash(basename);
+    if (previousHash) |hash| {
+        if (std.mem.eql(u8, computedHash, hash.hash)) {
+            return .{ .string = hash.tag };
+        }
+    }
+
     const tag = try docker.build(ctx.allocator, ctx.module, path);
 
-    const basename = std.fs.path.basename(path);
     const out = try std.fmt.allocPrint(ctx.allocator, "/tmp/mora-{s}-{s}-{s}.tar", .{ ctx.module, ctx.service, basename });
     defer ctx.allocator.free(out);
 
@@ -36,6 +46,8 @@ pub fn image(ctx: *const parser.EvaluationContext, args: []const parser.Expressi
         .tarball = out,
     };
     const response = try api.publish(publishContext);
+
+    try ctx.cache.setImageHash(ctx.allocator, basename, computedHash, response.image);
 
     return .{ .string = response.image };
 }

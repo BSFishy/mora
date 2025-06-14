@@ -4,5 +4,5 @@ config my_image {
 }
 
 service my_service {
-  image = (config my_image);
+  image = (image "./custom_image/");
 }

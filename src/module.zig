@@ -3,6 +3,12 @@ const parser = @import("parser.zig");
 
 const Self = @This();
 
+const ModuleContext = struct {
+    dir: std.fs.Dir,
+    environment: []const u8,
+    name: []const u8,
+};
+
 const Config = struct {
     identifier: []const u8,
     name: parser.Expression,
@@ -46,7 +52,7 @@ const Service = struct {
     image: parser.Expression,
     requires: []parser.Expression,
 
-    pub fn fromBlock(allocator: std.mem.Allocator, block: parser.Block) !Service {
+    pub fn fromBlock(allocator: std.mem.Allocator, ctx: ModuleContext, block: parser.Block) !Service {
         if (block.identifier.len != 2) {
             return error.invalidServiceName;
         }
@@ -63,7 +69,14 @@ const Service = struct {
             switch (item) {
                 .statement => |statement| {
                     if (std.mem.eql(u8, statement.identifier, "image")) {
-                        image = try dupeExpression(allocator, statement.expression);
+                        const expr = try dupeExpression(allocator, statement.expression);
+                        image = if (try expr.evaluate(&parser.EvaluationContext{
+                            .allocator = allocator,
+                            .environment = ctx.environment,
+                            .module = ctx.name,
+                            .service = name,
+                            .dir = ctx.dir,
+                        })) |value| try value.asExpression() else expr;
                     } else if (std.mem.eql(u8, statement.identifier, "requires")) {
                         try requires.append(allocator, try dupeExpression(allocator, statement.expression));
                     } else {
@@ -82,6 +95,7 @@ const Service = struct {
     }
 };
 
+dir: std.fs.Dir,
 name: []const u8,
 configs: []Config,
 services: []Service,
@@ -119,19 +133,24 @@ fn matchIdentifier(haystack: []const parser.Expression, needle: []const u8) bool
     return std.mem.eql(u8, needle, identifier);
 }
 
-pub fn init(allocator: std.mem.Allocator, name: []const u8) !Self {
+pub fn init(allocator: std.mem.Allocator, dir: std.fs.Dir, name: []const u8) !Self {
+    var owned = try dir.openDir(".", .{});
+    errdefer owned.close();
+
     return .{
+        .dir = owned,
         .name = name,
         .configs = try allocator.alloc(Config, 0),
         .services = try allocator.alloc(Service, 0),
     };
 }
 
-pub fn deinit(self: *const Self, allocator: std.mem.Allocator) void {
+pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+    self.dir.close();
     allocator.free(self.services);
 }
 
-pub fn insert(self: *Self, allocator: std.mem.Allocator, items: []const parser.Item) !void {
+pub fn insert(self: *Self, allocator: std.mem.Allocator, environment: []const u8, items: []const parser.Item) !void {
     var configs = std.ArrayListUnmanaged(Config).fromOwnedSlice(self.configs);
     var services = std.ArrayListUnmanaged(Service).fromOwnedSlice(self.services);
 
@@ -140,7 +159,7 @@ pub fn insert(self: *Self, allocator: std.mem.Allocator, items: []const parser.I
             .statement => return error.invalidStatement,
             .block => |block| {
                 if (matchIdentifier(block.identifier, "service")) {
-                    try services.append(allocator, try Service.fromBlock(allocator, block));
+                    try services.append(allocator, try Service.fromBlock(allocator, .{ .dir = self.dir, .environment = environment, .name = self.name }, block));
                 } else if (matchIdentifier(block.identifier, "config")) {
                     try configs.append(allocator, try Config.fromBlock(allocator, block));
                 } else {

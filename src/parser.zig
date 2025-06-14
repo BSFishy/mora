@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const functions = @import("functions.zig");
 const lexer = @import("lexer.zig");
 
 pub const Item = union(enum) {
@@ -31,6 +32,46 @@ pub const Block = struct {
     items: []Item,
 };
 
+pub const ReturnValue = union(enum) {
+    unknown,
+    identifier: []const u8,
+    string: []const u8,
+
+    pub fn asIdentifier(self: ReturnValue) ?[]const u8 {
+        return switch (self) {
+            .identifier => |ident| ident,
+            else => null,
+        };
+    }
+
+    pub fn asString(self: ReturnValue) ?[]const u8 {
+        return switch (self) {
+            .string => |string| string,
+            else => null,
+        };
+    }
+
+    pub fn asExpression(self: ReturnValue) !Expression {
+        return .{ .atom = try self.asAtom() };
+    }
+
+    pub fn asAtom(self: ReturnValue) !Atom {
+        return switch (self) {
+            .unknown => error.invalidExpression,
+            .identifier => |ident| .{ .identifier = ident },
+            .string => |string| .{ .string = string },
+        };
+    }
+};
+
+pub const EvaluationContext = struct {
+    allocator: std.mem.Allocator,
+    environment: []const u8,
+    module: []const u8,
+    service: []const u8,
+    dir: std.fs.Dir,
+};
+
 pub const Expression = union(enum) {
     list: ListExpression,
     atom: Atom,
@@ -47,6 +88,30 @@ pub const Expression = union(enum) {
             .atom => |atom| atom,
             else => null,
         };
+    }
+
+    pub fn evaluate(self: Expression, ctx: *const EvaluationContext) anyerror!?ReturnValue {
+        switch (self) {
+            .list => |list| {
+                if (list.len == 1) {
+                    return list[0].evaluate(ctx);
+                }
+
+                const name = ((try list[0].evaluate(ctx)) orelse return error.invalidFunction).asIdentifier() orelse return error.invalidFunction;
+                if (std.mem.eql(u8, "image", name)) {
+                    return try functions.image(ctx, list[1..]);
+                }
+
+                return null;
+            },
+            .atom => |atom| {
+                switch (atom) {
+                    .string => |string| return .{ .string = string },
+                    .identifier => |ident| return .{ .identifier = ident },
+                    else => return null,
+                }
+            },
+        }
     }
 };
 

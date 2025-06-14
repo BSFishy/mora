@@ -36,7 +36,7 @@ pub fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
         }
 
         const dir = try sample.openDir(entry.name, .{ .iterate = true });
-        try modules.append(allocator, try parseModule(moduleAlloc.allocator(), dir, entry.name));
+        try modules.append(allocator, try parseModule(moduleAlloc.allocator(), environment, dir, entry.name));
     }
 
     const moduleSlice = try modules.toOwnedSlice(allocator);
@@ -50,8 +50,8 @@ pub fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
     std.debug.print("Success\n", .{});
 }
 
-fn parseModule(allocator: std.mem.Allocator, dir: std.fs.Dir, name: []const u8) !Module {
-    var module = try Module.init(allocator, name);
+fn parseModule(allocator: std.mem.Allocator, environment: []const u8, dir: std.fs.Dir, name: []const u8) !Module {
+    var module = try Module.init(allocator, dir, name);
     errdefer module.deinit(allocator);
 
     var iter = dir.iterate();
@@ -77,7 +77,7 @@ fn parseModule(allocator: std.mem.Allocator, dir: std.fs.Dir, name: []const u8) 
 
         const items = try parser.parse(arena.allocator(), tokens);
 
-        try module.insert(allocator, items);
+        try module.insert(allocator, environment, items);
     }
 
     return module;

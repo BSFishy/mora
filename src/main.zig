@@ -10,6 +10,9 @@ fn default(allocator: std.mem.Allocator, args: *command.Args) !void {
 const deploy = @import("deploy.zig").deploy;
 const deploy_cmd = command.Command(.{
     .name = "deploy",
+    .flags = .{
+        .dir = .{ .short = 'd', .long = "directory", .help = "directory holding the configuration", .flag_type = .argument },
+    },
     .rest = true,
     .handler = deploy,
 });

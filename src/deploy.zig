@@ -17,8 +17,10 @@ pub fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
 
     const environment = rest[0];
 
+    const directory = args.option("dir") orelse ".";
+
     var cwd = std.fs.cwd();
-    var sample = try cwd.openDir("sample", .{ .iterate = true });
+    var sample = try cwd.openDir(directory, .{ .iterate = true });
     defer sample.close();
 
     var modules = std.ArrayListUnmanaged(Module).empty;

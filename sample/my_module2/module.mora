@@ -1,5 +1,5 @@
 service my_service {
-  image = (config my_module1 my_image);
+  image = "nginx";
 
   requires = (service my_module1 my_service);
 }

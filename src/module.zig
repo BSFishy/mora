@@ -79,7 +79,7 @@ const Service = struct {
     name: []const u8,
     image: parser.Expression,
     requires: []parser.Expression,
-    wingmen: []Wingman,
+    wingman: ?Wingman,
 
     pub fn fromBlock(allocator: std.mem.Allocator, ctx: ModuleContext, block: parser.Block) !Service {
         if (block.identifier.len != 2) {
@@ -100,11 +100,9 @@ const Service = struct {
         };
 
         var image: ?parser.Expression = null;
+        var wingman: ?Wingman = null;
         var requires = std.ArrayListUnmanaged(parser.Expression).empty;
         errdefer requires.deinit(allocator);
-
-        var wingmen = std.ArrayListUnmanaged(Wingman).empty;
-        errdefer wingmen.deinit(allocator);
 
         for (block.items) |item| {
             switch (item) {
@@ -121,7 +119,7 @@ const Service = struct {
                 },
                 .block => |blk| {
                     if (matchIdentifier(blk.identifier, "wingman")) {
-                        try wingmen.append(allocator, try Wingman.fromBlock(allocator, ctx, &evaluationContext, blk));
+                        wingman = try Wingman.fromBlock(allocator, ctx, &evaluationContext, blk);
                     } else {
                         return error.invalidBlock;
                     }
@@ -133,7 +131,7 @@ const Service = struct {
             .name = try allocator.dupe(u8, name),
             .image = image orelse return error.noImage,
             .requires = try requires.toOwnedSlice(allocator),
-            .wingmen = try wingmen.toOwnedSlice(allocator),
+            .wingman = wingman,
         };
     }
 };

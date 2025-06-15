@@ -49,10 +49,37 @@ const Config = struct {
     }
 };
 
+const Wingman = struct {
+    image: parser.Expression,
+
+    pub fn fromBlock(allocator: std.mem.Allocator, ctx: ModuleContext, evaluationContext: *const parser.EvaluationContext, block: parser.Block) !Wingman {
+        _ = ctx;
+
+        var image: ?parser.Expression = null;
+
+        for (block.items) |item| {
+            switch (item) {
+                .statement => |statement| {
+                    if (std.mem.eql(u8, statement.identifier, "image")) {
+                        const expr = try dupeExpression(allocator, statement.expression);
+                        image = try expr.eagerEvaluate(evaluationContext);
+                    }
+                },
+                .block => return error.invalidBlock,
+            }
+        }
+
+        return .{
+            .image = image orelse return error.invalidWingman,
+        };
+    }
+};
+
 const Service = struct {
     name: []const u8,
     image: parser.Expression,
     requires: []parser.Expression,
+    wingmen: []Wingman,
 
     pub fn fromBlock(allocator: std.mem.Allocator, ctx: ModuleContext, block: parser.Block) !Service {
         if (block.identifier.len != 2) {
@@ -63,30 +90,42 @@ const Service = struct {
         const atom = expression.asAtom() orelse return error.invalidServiceName;
         const name = atom.asIdentifier() orelse return error.invalidServiceName;
 
+        const evaluationContext = parser.EvaluationContext{
+            .allocator = allocator,
+            .cache = ctx.cache,
+            .environment = ctx.environment,
+            .module = ctx.name,
+            .service = name,
+            .dir = ctx.dir,
+        };
+
         var image: ?parser.Expression = null;
         var requires = std.ArrayListUnmanaged(parser.Expression).empty;
-        defer requires.deinit(allocator);
+        errdefer requires.deinit(allocator);
+
+        var wingmen = std.ArrayListUnmanaged(Wingman).empty;
+        errdefer wingmen.deinit(allocator);
 
         for (block.items) |item| {
             switch (item) {
                 .statement => |statement| {
                     if (std.mem.eql(u8, statement.identifier, "image")) {
                         const expr = try dupeExpression(allocator, statement.expression);
-                        image = if (try expr.evaluate(&parser.EvaluationContext{
-                            .allocator = allocator,
-                            .cache = ctx.cache,
-                            .environment = ctx.environment,
-                            .module = ctx.name,
-                            .service = name,
-                            .dir = ctx.dir,
-                        })) |value| try value.asExpression() else expr;
+                        image = try expr.eagerEvaluate(&evaluationContext);
                     } else if (std.mem.eql(u8, statement.identifier, "requires")) {
-                        try requires.append(allocator, try dupeExpression(allocator, statement.expression));
+                        const expr = try dupeExpression(allocator, statement.expression);
+                        try requires.append(allocator, try expr.eagerEvaluate(&evaluationContext));
                     } else {
                         return error.invalidStatement;
                     }
                 },
-                .block => return error.invalidBlock,
+                .block => |blk| {
+                    if (matchIdentifier(blk.identifier, "wingman")) {
+                        try wingmen.append(allocator, try Wingman.fromBlock(allocator, ctx, &evaluationContext, blk));
+                    } else {
+                        return error.invalidBlock;
+                    }
+                },
             }
         }
 
@@ -94,6 +133,7 @@ const Service = struct {
             .name = try allocator.dupe(u8, name),
             .image = image orelse return error.noImage,
             .requires = try requires.toOwnedSlice(allocator),
+            .wingmen = try wingmen.toOwnedSlice(allocator),
         };
     }
 };

@@ -92,6 +92,14 @@ pub const Expression = union(enum) {
         };
     }
 
+    pub fn eagerEvaluate(self: Expression, ctx: *const EvaluationContext) anyerror!Expression {
+        if (try self.evaluate(ctx)) |rv| {
+            return try rv.asExpression();
+        }
+
+        return self;
+    }
+
     pub fn evaluate(self: Expression, ctx: *const EvaluationContext) anyerror!?ReturnValue {
         switch (self) {
             .list => |list| {

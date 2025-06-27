@@ -2,30 +2,30 @@ package main
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/BSFishy/mora-manager/state"
+	"github.com/BSFishy/mora-manager/config"
 	"github.com/BSFishy/mora-manager/wingman"
 )
 
 type MyModule struct{}
 
-func (m *MyModule) GetConfigPoints(ctx context.Context, state state.State) ([]wingman.ConfigPoint, error) {
+func (m *MyModule) GetConfigPoints(ctx context.Context) ([]config.Point, error) {
+	state := wingman.GetState(ctx)
 	module := wingman.ModuleName(ctx)
+
 	if cfg := state.FindConfig(module, "test"); cfg != nil {
-		return []wingman.ConfigPoint{}, nil
+		return []config.Point{}, nil
 	}
 
-	return []wingman.ConfigPoint{
+	return []config.Point{
 		{
 			Identifier: "test",
 			Name:       "Testing",
+			Kind:       config.Secret,
 		},
 	}, nil
 }
 
 func main() {
-	fmt.Printf("hello world!\n")
-
 	wingman.Start(&MyModule{})
 }

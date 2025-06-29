@@ -70,7 +70,21 @@ pub fn ping(self: *Self, allocator: std.mem.Allocator) !void {
     }
 }
 
-pub fn deploy(self: *Self, allocator: std.mem.Allocator, env_slug: []const u8, config: Payload) !void {
+pub const DeploymentResponse = struct {
+    id: []const u8,
+
+    pub fn dupe(self: *const DeploymentResponse, allocator: std.mem.Allocator) !DeploymentResponse {
+        return .{
+            .id = try allocator.dupe(u8, self.id),
+        };
+    }
+
+    pub fn deinit(self: *const DeploymentResponse, allocator: std.mem.Allocator) void {
+        allocator.free(self.id);
+    }
+};
+
+pub fn deploy(self: *Self, allocator: std.mem.Allocator, env_slug: []const u8, config: Payload) !DeploymentResponse {
     const url = try std.fmt.allocPrint(allocator, "{s}/api/v1/environment/{s}/deployment", .{ self.base_url, env_slug });
     defer allocator.free(url);
 
@@ -99,6 +113,14 @@ pub fn deploy(self: *Self, allocator: std.mem.Allocator, env_slug: []const u8, c
     if (response.status != std.http.Status.ok) {
         return error.failedRequest;
     }
+
+    const responseBody = try request.reader().readAllAlloc(allocator, 2 * 1024 * 1024);
+    defer allocator.free(responseBody);
+
+    const responseValue = try std.json.parseFromSlice(DeploymentResponse, allocator, responseBody, .{});
+    defer responseValue.deinit();
+
+    return try responseValue.value.dupe(allocator);
 }
 
 pub const PublishContext = struct {

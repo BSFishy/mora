@@ -56,9 +56,11 @@ pub fn deploy(allocator: std.mem.Allocator, args: *command.Args) !void {
     var api = try Api.fromConfig(allocator);
     defer api.deinit(allocator);
 
-    try api.deploy(allocator, environment, .{ .modules = moduleSlice });
+    const deployment = try api.deploy(allocator, environment, .{ .modules = moduleSlice });
+    defer deployment.deinit(allocator);
 
-    std.debug.print("Success\n", .{});
+    std.debug.print("Successfully deployed {s}\n", .{deployment.id});
+    std.debug.print("To monitor the deployment, go to {s}/deployment/{s}\n", .{ api.base_url, deployment.id });
 }
 
 fn parseModule(allocator: std.mem.Allocator, cache: *Cache.ModuleCache, environment: []const u8, dir: std.fs.Dir, name: []const u8) !Module {

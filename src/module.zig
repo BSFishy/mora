@@ -75,11 +75,40 @@ const Wingman = struct {
     }
 };
 
+const Env = struct {
+    name: []const u8,
+    value: parser.Expression,
+
+    pub fn fromBlock(allocator: std.mem.Allocator, block: parser.Block) ![]Env {
+        if (block.identifier.len != 1) {
+            return error.invalidEnvBlock;
+        }
+
+        var envs = std.ArrayListUnmanaged(Env).empty;
+        errdefer envs.deinit(allocator);
+
+        for (block.items) |item| {
+            switch (item) {
+                .statement => |statement| {
+                    try envs.append(allocator, .{
+                        .name = try allocator.dupe(u8, statement.identifier),
+                        .value = try dupeExpression(allocator, statement.expression),
+                    });
+                },
+                .block => return error.invalidBlock,
+            }
+        }
+
+        return try envs.toOwnedSlice(allocator);
+    }
+};
+
 const Service = struct {
     name: []const u8,
     image: parser.Expression,
     requires: []parser.Expression,
     wingman: ?Wingman,
+    env: []Env,
 
     pub fn fromBlock(allocator: std.mem.Allocator, ctx: ModuleContext, block: parser.Block) !Service {
         if (block.identifier.len != 2) {
@@ -103,6 +132,8 @@ const Service = struct {
         var wingman: ?Wingman = null;
         var requires = std.ArrayListUnmanaged(parser.Expression).empty;
         errdefer requires.deinit(allocator);
+        var envs = std.ArrayListUnmanaged(Env).empty;
+        errdefer envs.deinit(allocator);
 
         for (block.items) |item| {
             switch (item) {
@@ -120,6 +151,8 @@ const Service = struct {
                 .block => |blk| {
                     if (matchIdentifier(blk.identifier, "wingman")) {
                         wingman = try Wingman.fromBlock(allocator, ctx, &evaluationContext, blk);
+                    } else if (matchIdentifier(blk.identifier, "env")) {
+                        try envs.appendSlice(allocator, try Env.fromBlock(allocator, blk));
                     } else {
                         return error.invalidBlock;
                     }
@@ -132,6 +165,7 @@ const Service = struct {
             .image = image orelse return error.noImage,
             .requires = try requires.toOwnedSlice(allocator),
             .wingman = wingman,
+            .env = try envs.toOwnedSlice(allocator),
         };
     }
 };

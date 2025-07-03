@@ -9,4 +9,8 @@ service my_service {
   wingman {
     image = (image "./custom_image/");
   }
+
+  env {
+    test = (config api_key);
+  }
 }

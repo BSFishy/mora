@@ -12,5 +12,6 @@ service my_service {
 
   env {
     test = (config api_key);
+    example = (cloudflared_token);
   }
 }

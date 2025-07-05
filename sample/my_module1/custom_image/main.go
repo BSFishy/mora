@@ -2,8 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/cloudflare/cloudflare-go/v4"
+	"github.com/cloudflare/cloudflare-go/v4/option"
+	"github.com/cloudflare/cloudflare-go/v4/zero_trust"
 
 	"github.com/BSFishy/mora-manager/expr"
+	"github.com/BSFishy/mora-manager/kube"
 	"github.com/BSFishy/mora-manager/point"
 	"github.com/BSFishy/mora-manager/value"
 	"github.com/BSFishy/mora-manager/wingman"
@@ -39,13 +45,82 @@ func (m *MyModule) GetConfigPoints(ctx context.Context, deps wingman.WingmanCont
 	return cfp, nil
 }
 
+// TODO: make these configurable
+const (
+	accountId  = "0fb96e014f4d50adf73b571840427dc3"
+	tunnelName = "test tunnel"
+)
+
 func (m *MyModule) GetFunctions(ctx context.Context, deps wingman.WingmanContext) (map[string]expr.ExpressionFunction, error) {
 	return map[string]expr.ExpressionFunction{
 		"cloudflared_token": {
 			MinArgs: 0,
 			MaxArgs: 0,
 			Evaluate: func(ctx context.Context, deps expr.EvaluationContext, args expr.Args) (value.Value, []point.Point, error) {
-				return value.NewString("hello world!"), nil, nil
+				state := deps.GetState()
+				module := deps.GetModuleName()
+
+				// TODO: properly do this
+				if cfg := state.FindConfig(module, "cloudflared_token"); cfg != nil {
+					return value.NewSecret(string(cfg.Value)), nil, nil
+				}
+
+				apiKeyConfig := state.FindConfig(module, "api_key")
+				emailConfig := state.FindConfig(module, "email")
+
+				if apiKeyConfig == nil || emailConfig == nil {
+					return nil, nil, fmt.Errorf("invalid state")
+				}
+
+				apiKey := string(apiKeyConfig.Value)
+				email := string(emailConfig.Value)
+
+				apiKeySecret, err := kube.GetSecret(ctx, deps, apiKey)
+				if err != nil {
+					return nil, nil, fmt.Errorf("getting api key secret: %w", err)
+				}
+
+				client := cloudflare.NewClient(option.WithAPIKey(string(apiKeySecret)), option.WithAPIEmail(email))
+				tunnels, err := client.ZeroTrust.Tunnels.Cloudflared.List(ctx, zero_trust.TunnelCloudflaredListParams{
+					AccountID: cloudflare.F(accountId),
+				})
+				if err != nil {
+					return nil, nil, fmt.Errorf("listing tunnels: %w", err)
+				}
+
+				var tunnelId string
+				for _, tunnel := range tunnels.Result {
+					if tunnel.Name == tunnelName {
+						tunnelId = tunnel.ID
+						break
+					}
+				}
+
+				if tunnelId == "" {
+					tunnel, err := client.ZeroTrust.Tunnels.Cloudflared.New(ctx, zero_trust.TunnelCloudflaredNewParams{
+						AccountID: cloudflare.F(accountId),
+						Name:      cloudflare.F(tunnelName),
+					})
+					if err != nil {
+						return nil, nil, fmt.Errorf("creating tunnel: %w", err)
+					}
+
+					tunnelId = tunnel.ID
+				}
+
+				token, err := client.ZeroTrust.Tunnels.Cloudflared.Token.Get(ctx, tunnelId, zero_trust.TunnelCloudflaredTokenGetParams{
+					AccountID: cloudflare.F(accountId),
+				})
+				if err != nil {
+					return nil, nil, fmt.Errorf("getting token: %w", err)
+				}
+
+				secret := kube.NewSecret(deps, "cloudflared_token", []byte(*token))
+				if err := kube.Deploy(ctx, deps, secret); err != nil {
+					return nil, nil, fmt.Errorf("deploying token secret: %w", err)
+				}
+
+				return value.NewSecret(secret.Name()), nil, nil
 			},
 		},
 	}, nil

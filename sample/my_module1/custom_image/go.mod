@@ -5,7 +5,7 @@ go 1.24.3
 toolchain go1.24.4
 
 require (
-	github.com/BSFishy/mora-manager v0.0.0-20250705033031-496dba8ef79b
+	github.com/BSFishy/mora-manager v0.0.0-20250706173753-b7be7134b1a3
 	github.com/cloudflare/cloudflare-go/v4 v4.5.1
 )
 

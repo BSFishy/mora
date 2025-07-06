@@ -3,15 +3,15 @@ config my_image {
   description = "Put in hello-world@sha256:dd01f97f252193ae3210da231b1dca0cffab4aadb3566692d6730bf93f123a48";
 }
 
-service my_service {
-  image = "nginx";
+service cloudflared {
+  image = "cloudflare/cloudflared:latest";
+  command = "cloudflared tunnel run";
 
   wingman {
     image = (image "./custom_image/");
   }
 
   env {
-    test = (config api_key);
-    example = (cloudflared_token);
+    TUNNEL_TOKEN = (cloudflared_token);
   }
 }

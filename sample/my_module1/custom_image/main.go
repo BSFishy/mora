@@ -11,6 +11,7 @@ import (
 	"github.com/BSFishy/mora-manager/expr"
 	"github.com/BSFishy/mora-manager/kube"
 	"github.com/BSFishy/mora-manager/point"
+	"github.com/BSFishy/mora-manager/state"
 	"github.com/BSFishy/mora-manager/value"
 	"github.com/BSFishy/mora-manager/wingman"
 )
@@ -51,22 +52,21 @@ const (
 	tunnelName = "test tunnel"
 )
 
-func (m *MyModule) GetFunctions(ctx context.Context, deps wingman.WingmanContext) (map[string]expr.ExpressionFunction, error) {
+func (m *MyModule) GetFunctions() map[string]expr.ExpressionFunction {
 	return map[string]expr.ExpressionFunction{
 		"cloudflared_token": {
 			MinArgs: 0,
 			MaxArgs: 0,
 			Evaluate: func(ctx context.Context, deps expr.EvaluationContext, args expr.Args) (value.Value, []point.Point, error) {
-				state := deps.GetState()
+				st := deps.GetState()
 				module := deps.GetModuleName()
 
-				// TODO: properly do this
-				if cfg := state.FindConfig(module, "cloudflared_token"); cfg != nil {
+				if cfg := st.FindConfig(module, "cloudflared_token"); cfg != nil {
 					return value.NewSecret(string(cfg.Value)), nil, nil
 				}
 
-				apiKeyConfig := state.FindConfig(module, "api_key")
-				emailConfig := state.FindConfig(module, "email")
+				apiKeyConfig := st.FindConfig(module, "api_key")
+				emailConfig := st.FindConfig(module, "email")
 
 				if apiKeyConfig == nil || emailConfig == nil {
 					return nil, nil, fmt.Errorf("invalid state")
@@ -120,10 +120,17 @@ func (m *MyModule) GetFunctions(ctx context.Context, deps wingman.WingmanContext
 					return nil, nil, fmt.Errorf("deploying token secret: %w", err)
 				}
 
+				st.Configs = append(st.Configs, state.StateConfig{
+					ModuleName: module,
+					Name:       "cloudflared_token",
+					Kind:       point.Secret,
+					Value:      []byte(secret.Name()),
+				})
+
 				return value.NewSecret(secret.Name()), nil, nil
 			},
 		},
-	}, nil
+	}
 }
 
 func main() {

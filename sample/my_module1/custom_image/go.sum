@@ -1,5 +1,5 @@
-github.com/BSFishy/mora-manager v0.0.0-20250705033031-496dba8ef79b h1:XA5LiIKU6uyRC7jaKlFL9c99/61XPYkW6WFZnM0eXvM=
-github.com/BSFishy/mora-manager v0.0.0-20250705033031-496dba8ef79b/go.mod h1:+l34VmJ0SvyNfCs8TyoO112LC9S31ppnZsHKdomRPFk=
+github.com/BSFishy/mora-manager v0.0.0-20250706173753-b7be7134b1a3 h1:w0GooU4Gqpe/vNoytvgqko9FGFQazsXDnLYxi4w5GLw=
+github.com/BSFishy/mora-manager v0.0.0-20250706173753-b7be7134b1a3/go.mod h1:+l34VmJ0SvyNfCs8TyoO112LC9S31ppnZsHKdomRPFk=
 github.com/cloudflare/cloudflare-go/v4 v4.5.1 h1:ZQgQ7QO+M9rK0KYx1CmppuG15ZTYGHn8F9/Fh7mCuQQ=
 github.com/cloudflare/cloudflare-go/v4 v4.5.1/go.mod h1:XcYpLe7Mf6FN87kXzEWVnJ6z+vskW/k6eUqgqfhFE9k=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

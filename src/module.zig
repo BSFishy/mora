@@ -106,6 +106,7 @@ const Env = struct {
 const Service = struct {
     name: []const u8,
     image: parser.Expression,
+    command: ?parser.Expression,
     requires: []parser.Expression,
     wingman: ?Wingman,
     env: []Env,
@@ -129,6 +130,7 @@ const Service = struct {
         };
 
         var image: ?parser.Expression = null;
+        var command: ?parser.Expression = null;
         var wingman: ?Wingman = null;
         var requires = std.ArrayListUnmanaged(parser.Expression).empty;
         errdefer requires.deinit(allocator);
@@ -144,6 +146,8 @@ const Service = struct {
                     } else if (std.mem.eql(u8, statement.identifier, "requires")) {
                         const expr = try dupeExpression(allocator, statement.expression);
                         try requires.append(allocator, try expr.eagerEvaluate(&evaluationContext));
+                    } else if (std.mem.eql(u8, statement.identifier, "command")) {
+                        command = try dupeExpression(allocator, statement.expression);
                     } else {
                         return error.invalidStatement;
                     }
@@ -163,6 +167,7 @@ const Service = struct {
         return .{
             .name = try allocator.dupe(u8, name),
             .image = image orelse return error.noImage,
+            .command = command,
             .requires = try requires.toOwnedSlice(allocator),
             .wingman = wingman,
             .env = try envs.toOwnedSlice(allocator),

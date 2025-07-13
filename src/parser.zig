@@ -93,35 +93,63 @@ pub const Expression = union(enum) {
     }
 
     pub fn eagerEvaluate(self: Expression, ctx: *const EvaluationContext) anyerror!Expression {
+        switch (self) {
+            .list => |list| {
+                if (list.len < 1) {
+                    return error.invalidFunction;
+                }
+
+                var expressions = std.ArrayListUnmanaged(Expression).empty;
+                errdefer expressions.deinit(ctx.allocator);
+
+                for (list) |item| {
+                    try expressions.append(ctx.allocator, try item.eagerEvaluate(ctx));
+                }
+
+                const name_expression = expressions.items[0];
+                if (name_expression.asAtom()) |name_atom| {
+                    if (name_atom.asIdentifier()) |name_identifier| {
+                        if (std.mem.eql(u8, name_identifier, "image")) {
+                            defer expressions.deinit(ctx.allocator);
+                            return functions.image(ctx, expressions.items[1..]);
+                        } else if (std.mem.eql(u8, name_identifier, "read_file")) {
+                            defer expressions.deinit(ctx.allocator);
+
+                            if (expressions.items.len != 2) {
+                                return error.invalidReadFileCall;
+                            }
+
+                            const file_name_expression = expressions.items[1];
+                            const file_name_atom = file_name_expression.asAtom() orelse return error.invalidReadFileName;
+                            const file_name = file_name_atom.asString() orelse return error.invalidReadFileName;
+
+                            const contents = try ctx.dir.readFileAlloc(ctx.allocator, file_name, 2 * 1024 * 1024 * 1024);
+                            errdefer ctx.allocator.free(contents);
+
+                            const encoder = std.base64.standard.Encoder;
+                            const b64_len = encoder.calcSize(contents.len);
+
+                            const file = try ctx.allocator.alloc(u8, b64_len);
+                            errdefer ctx.allocator.free(file);
+
+                            const file_contents = encoder.encode(file, contents);
+                            return .{ .atom = .{ .file = file_contents } };
+                        }
+                    }
+                }
+
+                return .{
+                    .list = try expressions.toOwnedSlice(ctx.allocator),
+                };
+            },
+            .atom => return self,
+        }
+
         if (try self.evaluate(ctx)) |rv| {
             return try rv.asExpression();
         }
 
         return self;
-    }
-
-    pub fn evaluate(self: Expression, ctx: *const EvaluationContext) anyerror!?ReturnValue {
-        switch (self) {
-            .list => |list| {
-                if (list.len == 1) {
-                    return list[0].evaluate(ctx);
-                }
-
-                const name = ((try list[0].evaluate(ctx)) orelse return error.invalidFunction).asIdentifier() orelse return error.invalidFunction;
-                if (std.mem.eql(u8, "image", name)) {
-                    return try functions.image(ctx, list[1..]);
-                }
-
-                return null;
-            },
-            .atom => |atom| {
-                switch (atom) {
-                    .string => |string| return .{ .string = string },
-                    .identifier => |ident| return .{ .identifier = ident },
-                    else => return null,
-                }
-            },
-        }
     }
 };
 
@@ -130,6 +158,8 @@ pub const ListExpression = []Expression;
 pub const Atom = union(enum) {
     string: []const u8,
     identifier: []const u8,
+    // base64 encoded file
+    file: []const u8,
     // representing numbers as the raw string that comes from the source code.
     // no need to actually parse it out here, can just send it directly to the
     // manager

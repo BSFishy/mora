@@ -1,5 +1,9 @@
-service my_service {
-  image = "nginx";
+service glance {
+  image = "glanceapp/glance";
+  requires = (service my_module1 cloudflared);
 
-  requires = (service my_module1 my_service);
+  config {
+    path = "/app/config/glance.yml";
+    file = (read_file "./glance.yml");
+  }
 }

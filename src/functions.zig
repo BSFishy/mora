@@ -4,13 +4,14 @@ const Api = @import("api.zig");
 const parser = @import("parser.zig");
 const docker = @import("docker.zig");
 
-pub fn image(ctx: *const parser.EvaluationContext, args: []const parser.Expression) !parser.ReturnValue {
+pub fn image(ctx: *const parser.EvaluationContext, args: []const parser.Expression) !parser.Expression {
     if (args.len != 1) {
         return error.invalidImageCall;
     }
 
-    const arg = try args[0].evaluate(ctx);
-    const sub_path = (arg orelse return error.invalidFunction).asString() orelse return error.invalidFunction;
+    const arg = try args[0].eagerEvaluate(ctx);
+    const arg_atom = arg.asAtom() orelse return error.invalidImageFunction;
+    const sub_path = arg_atom.asString() orelse return error.invalidImageFunction;
 
     var dir = try ctx.dir.openDir(sub_path, .{});
     defer dir.close();
@@ -24,7 +25,7 @@ pub fn image(ctx: *const parser.EvaluationContext, args: []const parser.Expressi
     const previousHash = ctx.cache.getImageHash(basename);
     if (previousHash) |hash| {
         if (std.mem.eql(u8, computedHash, hash.hash)) {
-            return .{ .string = hash.tag };
+            return .{ .atom = .{ .string = hash.tag } };
         }
     }
 
@@ -49,5 +50,5 @@ pub fn image(ctx: *const parser.EvaluationContext, args: []const parser.Expressi
 
     try ctx.cache.setImageHash(ctx.allocator, basename, computedHash, response.image);
 
-    return .{ .string = response.image };
+    return .{ .atom = .{ .string = response.image } };
 }

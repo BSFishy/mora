@@ -79,7 +79,7 @@ const Env = struct {
     name: []const u8,
     value: parser.Expression,
 
-    pub fn fromBlock(allocator: std.mem.Allocator, block: parser.Block) ![]Env {
+    pub fn fromBlock(allocator: std.mem.Allocator, ctx: *const parser.EvaluationContext, block: parser.Block) ![]Env {
         if (block.identifier.len != 1) {
             return error.invalidEnvBlock;
         }
@@ -90,9 +90,10 @@ const Env = struct {
         for (block.items) |item| {
             switch (item) {
                 .statement => |statement| {
+                    const expr = try dupeExpression(allocator, statement.expression);
                     try envs.append(allocator, .{
                         .name = try allocator.dupe(u8, statement.identifier),
-                        .value = try dupeExpression(allocator, statement.expression),
+                        .value = try expr.eagerEvaluate(ctx),
                     });
                 },
                 .block => return error.invalidBlock,
@@ -103,11 +104,48 @@ const Env = struct {
     }
 };
 
+const ConfigMap = struct {
+    path: parser.Expression,
+    file: parser.Expression,
+
+    pub fn fromBlock(allocator: std.mem.Allocator, ctx: *const parser.EvaluationContext, block: parser.Block) !ConfigMap {
+        if (block.identifier.len != 1) {
+            return error.invalidEnvBlock;
+        }
+
+        var path: ?parser.Expression = null;
+        var file: ?parser.Expression = null;
+
+        for (block.items) |item| {
+            switch (item) {
+                .statement => |statement| {
+                    if (std.mem.eql(u8, statement.identifier, "path")) {
+                        const expr = try dupeExpression(allocator, statement.expression);
+                        path = try expr.eagerEvaluate(ctx);
+                    } else if (std.mem.eql(u8, statement.identifier, "file")) {
+                        const expr = try dupeExpression(allocator, statement.expression);
+                        file = try expr.eagerEvaluate(ctx);
+                    } else {
+                        return error.invalidConfigMap;
+                    }
+                },
+                .block => return error.invalidBlock,
+            }
+        }
+
+        return .{
+            .path = path orelse return error.invalidConfigMap,
+            .file = file orelse return error.invalidConfigMap,
+        };
+    }
+};
+
 const Service = struct {
     name: []const u8,
     image: parser.Expression,
     command: ?parser.Expression,
     requires: []parser.Expression,
+    configs: []ConfigMap,
     wingman: ?Wingman,
     env: []Env,
 
@@ -134,6 +172,10 @@ const Service = struct {
         var wingman: ?Wingman = null;
         var requires = std.ArrayListUnmanaged(parser.Expression).empty;
         errdefer requires.deinit(allocator);
+
+        var configs = std.ArrayListUnmanaged(ConfigMap).empty;
+        errdefer configs.deinit(allocator);
+
         var envs = std.ArrayListUnmanaged(Env).empty;
         errdefer envs.deinit(allocator);
 
@@ -147,7 +189,8 @@ const Service = struct {
                         const expr = try dupeExpression(allocator, statement.expression);
                         try requires.append(allocator, try expr.eagerEvaluate(&evaluationContext));
                     } else if (std.mem.eql(u8, statement.identifier, "command")) {
-                        command = try dupeExpression(allocator, statement.expression);
+                        const expr = try dupeExpression(allocator, statement.expression);
+                        command = try expr.eagerEvaluate(&evaluationContext);
                     } else {
                         return error.invalidStatement;
                     }
@@ -156,7 +199,9 @@ const Service = struct {
                     if (matchIdentifier(blk.identifier, "wingman")) {
                         wingman = try Wingman.fromBlock(allocator, ctx, &evaluationContext, blk);
                     } else if (matchIdentifier(blk.identifier, "env")) {
-                        try envs.appendSlice(allocator, try Env.fromBlock(allocator, blk));
+                        try envs.appendSlice(allocator, try Env.fromBlock(allocator, &evaluationContext, blk));
+                    } else if (matchIdentifier(blk.identifier, "config")) {
+                        try configs.append(allocator, try ConfigMap.fromBlock(allocator, &evaluationContext, blk));
                     } else {
                         return error.invalidBlock;
                     }
@@ -169,6 +214,7 @@ const Service = struct {
             .image = image orelse return error.noImage,
             .command = command,
             .requires = try requires.toOwnedSlice(allocator),
+            .configs = try configs.toOwnedSlice(allocator),
             .wingman = wingman,
             .env = try envs.toOwnedSlice(allocator),
         };
@@ -186,6 +232,7 @@ fn dupeExpression(allocator: std.mem.Allocator, expression: parser.Expression) !
             return .{ .atom = switch (atom) {
                 .identifier => |identifier| .{ .identifier = try allocator.dupe(u8, identifier) },
                 .string => |string| .{ .string = try allocator.dupe(u8, string) },
+                .file => |file| .{ .file = try allocator.dupe(u8, file) },
                 .number => |number| .{ .number = try allocator.dupe(u8, number) },
             } };
         },
